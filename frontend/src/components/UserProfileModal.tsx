@@ -6,14 +6,32 @@ import { useAuth } from '../contexts/AuthContext';
 export default function UserProfileModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
     const { user, login } = useAuth(); // Assuming login or setUser function updates auth context; we might just reload or assume it updates. Wait, login(newUser, roles)? We can use window.location.reload() for simplicity.
     const [matKhau, setMatKhau] = useState('');
+    const [xacNhanMatKhau, setXacNhanMatKhau] = useState('');
     const [avatar, setAvatar] = useState<File | null>(null);
     const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
 
     if (!isOpen || !user) return null;
 
+    const validatePassword = (password: string) => {
+        const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d\W]{8,}$/;
+        return passwordRegex.test(password);
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        if (matKhau) {
+            if (!validatePassword(matKhau)) {
+                setMessage('Mật khẩu yếu. Yêu cầu lớn hơn hoặc bằng 8 ký tự, có chứa chữ hoa, chữ thường và số.');
+                return;
+            }
+            if (matKhau !== xacNhanMatKhau) {
+                setMessage('Mật khẩu nhập lại không khớp.');
+                return;
+            }
+        }
+
         setLoading(true);
         setMessage('');
 
@@ -75,6 +93,19 @@ export default function UserProfileModal({ isOpen, onClose }: { isOpen: boolean;
                             placeholder="Nhập mật khẩu mới..."
                         />
                     </div>
+
+                    {matKhau && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">Xác nhận mật khẩu mới</label>
+                            <input 
+                                type="password" 
+                                value={xacNhanMatKhau}
+                                onChange={(e) => setXacNhanMatKhau(e.target.value)}
+                                className="w-full border-gray-300 rounded-lg px-4 py-2 border focus:ring-[#e60000] focus:border-[#e60000]"
+                                placeholder="Nhập lại mật khẩu mới..."
+                            />
+                        </div>
+                    )}
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Ảnh đại diện</label>
