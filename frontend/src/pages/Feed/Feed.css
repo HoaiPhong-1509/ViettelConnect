@@ -1,0 +1,67 @@
+.feed-container {
+    max-width: 680px;
+    margin: 0 auto;
+    padding: 20px 10px;
+}
+
+.end-of-feed {
+    text-align: center;
+    color: #65676B;
+    font-size: 14px;
+    margin: 20px 0;
+    font-weight: 600;
+}
+
+/* Skeleton */
+.skeleton-card {
+    background: #FFFFFF;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 20px;
+}
+
+.skeleton-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+
+.skeleton-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: #E4E6EB;
+    animation: shimmer 1.5s infinite linear;
+}
+
+.skeleton-info {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+}
+
+.skeleton-line {
+    height: 12px;
+    background: #E4E6EB;
+    border-radius: 6px;
+    animation: shimmer 1.5s infinite linear;
+}
+
+.short { width: 120px; }
+.shorter { width: 80px; }
+.full { width: 100%; margin-bottom: 8px;}
+.medium { width: 60%; }
+
+@keyframes shimmer {
+    0% { background-color: #E4E6EB; }
+    50% { background-color: #F0F2F5; }
+    100% { background-color: #E4E6EB; }
+}
+
+@media (max-width: 500px) {
+    .feed-container {
+        padding: 0;
+    }
+}

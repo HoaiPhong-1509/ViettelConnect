@@ -7,6 +7,10 @@ import pool from './db.js';
 import authRoutes from './auth.js';
 import adminRoutes from './admin.js';
 import userRoutes from './user.js';
+import postRoutes from './post.js';
+import baidangRoutes from './routes/baidang.routes.js';
+import mediaRoutes from './routes/media.routes.js';
+import binhluanRoutes from './routes/binhluan.routes.js';
 import dotenv from 'dotenv';
 dotenv.config();
 
@@ -42,13 +46,17 @@ app.use('/api/', limiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/user', userRoutes);
+app.use('/api/posts', postRoutes);
+app.use('/api/baidang', baidangRoutes);
+app.use('/api/media', mediaRoutes);
+app.use('/api/binhluan', binhluanRoutes);
 
 // Serve static files for uploads
 import path from 'path';
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.get('/api/nguoidung', async (req, res) => {
     try {

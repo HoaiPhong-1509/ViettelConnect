@@ -32,12 +32,7 @@ export default function RootLayout({
     />
   </head>
   <body
-    className="min-h-screen"
-    style={{
-      backgroundImage: "linear-gradient(to top, #ffa8cc 0%, #e50000 100%)",
-      backgroundRepeat: "no-repeat",
-      backgroundSize: "cover",
-    }}
+    className="min-h-screen bg-[#f0f2f5]"
   >
     <AuthProvider>
       {children}

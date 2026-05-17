@@ -5,6 +5,8 @@ import pool from './db.js';
 import { body, validationResult } from 'express-validator';
 import { sendOTPEmail } from './mailer.js';
 
+import { getPresignedUrl } from './services/minio.service.js';
+
 const router = express.Router();
 
 // Bộ nhớ tạm lưu trữ OTP (Sử dụng Map: email -> { otp, expiry })
@@ -154,8 +156,16 @@ router.post('/login', [
             maxAge: 24 * 60 * 60 * 1000 // 1 ngày
         });
 
+        // Cấp phát URL Avatar từ MinIO
+        let avatarUrl = null;
+        if (user.AnhDaiDienKey) {
+            avatarUrl = await getPresignedUrl(user.AnhDaiDienKey);
+        } else {
+            avatarUrl = await getPresignedUrl('avatars/Default_Avatar.jpg');
+        }
+
         // Không gửi Token về nữa, chỉ gửi tin báo và info user
-        res.json({ message: 'Đăng nhập thành công', user: { id: user.Id, tenDangNhap: user.TenDangNhap, email: user.Email, roles: userRoles, avatar: user.AnhDaiDienUrl } });
+        res.json({ message: 'Đăng nhập thành công', user: { id: user.Id, tenDangNhap: user.TenDangNhap, email: user.Email, roles: userRoles, avatar: avatarUrl } });
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Lỗi server' });

@@ -1,22 +1,15 @@
 import express from 'express';
 import bcrypt from 'bcrypt';
 import multer from 'multer';
+import crypto from 'crypto';
 import path from 'path';
 import pool from './db.js';
 import { verifyToken } from './middleware/authMiddleware.js';
+import { uploadToMinio, getPresignedUrl } from './services/minio.service.js';
 
 const router = express.Router();
 
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-        cb(null, 'uploads/avatar/');
-    },
-    filename: function (req, file, cb) {
-        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-        cb(null, req.user.id + '-' + uniqueSuffix + path.extname(file.originalname));
-    }
-});
-
+const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
 router.put('/profile', verifyToken, upload.single('avatar'), async (req, res) => {
@@ -62,9 +55,22 @@ router.put('/profile', verifyToken, upload.single('avatar'), async (req, res) =>
             updates.push('NgayDoiMatKhau = NOW()');
         }
 
+        let avatarUrl = null;
         if (req.file) {
-            updates.push('AnhDaiDienUrl = ?');
-            queryParams.push('/uploads/avatar/' + req.file.filename);
+            const uuid = crypto.randomUUID();
+            const ext = path.extname(req.file.originalname) || '.jpg';
+            const key = `avatars/${userId}-${uuid}${ext}`;
+            
+            await uploadToMinio(key, req.file.buffer, req.file.mimetype);
+            
+            updates.push('AnhDaiDienKey = ?');
+            queryParams.push(key);
+            
+            // Xóa luôn AnhDaiDienUrl cũ vì ta xài Key rồi
+            updates.push('AnhDaiDienUrl = NULL');
+            
+            // Render URL mới báo về Frontend
+            avatarUrl = await getPresignedUrl(key);
         }
 
         if (updates.length === 0) {
@@ -77,9 +83,17 @@ router.put('/profile', verifyToken, upload.single('avatar'), async (req, res) =>
         await pool.query(updateQuery, queryParams);
 
         // Fetch updated user info
-        const [users] = await pool.query('SELECT Id, TenDangNhap, Email, AnhDaiDienUrl FROM nguoidung WHERE Id = ?', [userId]);
+        const [users] = await pool.query('SELECT Id, TenDangNhap, Email, AnhDaiDienKey, AnhDaiDienUrl FROM nguoidung WHERE Id = ?', [userId]);
+        const updatedUser = users[0];
+        
+        if (!avatarUrl && updatedUser.AnhDaiDienKey) {
+            avatarUrl = await getPresignedUrl(updatedUser.AnhDaiDienKey);
+        } else if (!avatarUrl) {
+            avatarUrl = await getPresignedUrl('avatars/Default_Avatar.jpg');
+        }
+        updatedUser.AnhDaiDienUrl = avatarUrl; // map lại cho đồng bộ
 
-        res.json({ message: 'Cập nhật thành công', user: users[0] });
+        res.json({ message: 'Cập nhật thành công', user: updatedUser });
     } catch (err) {
         console.error(err);
         res.status(500).json({ message: 'Lỗi server' });

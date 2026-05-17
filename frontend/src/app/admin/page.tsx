@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import Link from 'next/link';
 import api from '@/services/api';
 
 export default function AdminDashboard() {
@@ -59,12 +60,12 @@ export default function AdminDashboard() {
                   </div>
                   
                   {/* Floating Action Button */}
-                  <button className="absolute bottom-6 right-8 group bg-white/20 hover:bg-[#b30000] text-white hover:text-primary backdrop-blur-md border border-white/40 px-8 py-4 rounded-3xl font-bold text-sm tracking-widest shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:shadow-[0_8px_30px_rgba(230,0,0,0.4)] flex items-center transition-all duration-300 hover:scale-105">
+                  <Link href="/admin/nguoidung" className="absolute bottom-6 right-8 group bg-white/20 hover:bg-[#b30000] text-white hover:text-primary backdrop-blur-md border border-white/40 px-8 py-4 rounded-3xl font-bold text-sm tracking-widest shadow-[0_8px_30px_rgb(0,0,0,0.12)] hover:shadow-[0_8px_30px_rgba(230,0,0,0.4)] flex items-center transition-all duration-300 hover:scale-105">
                       <span>XEM CHI TIẾT</span>
                       <div className="ml-3 w-8 h-8 rounded-full bg-white/30 group-hover:bg-primary text-white flex items-center justify-center transition-colors duration-300 shadow-inner">
                           <i className="fa-solid fa-arrow-right text-xs group-hover:translate-x-1 transition-transform duration-300"></i>
                       </div>
-                  </button>
+                  </Link>
                   
                   {/* Illustration Placeholder */}
                   <div className="absolute right-0 bottom-0 h-[100%] w-1/2 opacity-90 pointer-events-none flex items-end justify-end">
