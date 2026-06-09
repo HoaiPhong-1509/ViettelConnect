@@ -10,18 +10,19 @@ const PostForm = ({ onPostCreated }) => {
     const [previews, setPreviews] = useState([]);
     const [uploading, setUploading] = useState(false);
     const [progress, setProgress] = useState(0);
+    const [statusMessage, setStatusMessage] = useState('');
     const fileInputRef = useRef(null);
 
     const handleFileSelect = (e) => {
         const selectedFiles = Array.from(e.target.files);
         if (selectedFiles.length + files.length > 10) {
-            alert('Tối đa 10 ảnh');
+            alert('Tối đa 10 ảnh hoặc video');
             return;
         }
 
-        const validFiles = selectedFiles.filter(f => f.size <= 10 * 1024 * 1024);
+        const validFiles = selectedFiles.filter(f => f.size <= 50 * 1024 * 1024);
         if (validFiles.length < selectedFiles.length) {
-            alert('Một số file vượt quá 10MB và đã bị loại bỏ.');
+            alert('Một số file vượt quá 50MB và đã bị loại bỏ.');
         }
 
         setFiles(prev => [...prev, ...validFiles]);
@@ -29,7 +30,7 @@ const PostForm = ({ onPostCreated }) => {
         validFiles.forEach(file => {
             const reader = new FileReader();
             reader.onload = (e) => {
-                setPreviews(prev => [...prev, e.target.result]);
+                setPreviews(prev => [...prev, { url: e.target.result, type: file.type }]);
             };
             reader.readAsDataURL(file);
         });
@@ -58,20 +59,23 @@ const PostForm = ({ onPostCreated }) => {
             }
 
             const postRes = await createPostApi(content, mediaIds);
-            
-            // Giả lập post mới để append vào top feed ngay mà không cần reload
-            const newPost = {
-                Id: postRes.data.postId,
+            setStatusMessage(postRes?.message || 'Bài viết đã được gửi và đang chờ duyệt.');
+            setTimeout(() => setStatusMessage(''), 4000);
+
+            const newPost = postRes.data?.post || {
+                Id: postRes.data?.postId,
                 NoiDung: content,
-                TenDangNhap: 'Tôi', // Hoặc lấy từ AuthContext
+                TenDangNhap: user?.tenDangNhap || 'Tôi',
                 NgayTao: new Date().toISOString(),
                 SoLuotThich: 0,
                 SoBinhLuan: 0,
+                DiemFeed: 0,
                 IsLiked: false,
-                Media: previews.map((url, i) => ({
+                Media: previews.map((preview, i) => ({
                     Id: `temp-${i}`,
-                    Url: url,
-                    ThumbnailUrl: url
+                    Url: preview.url,
+                    ThumbnailUrl: preview.type.startsWith('video/') ? null : preview.url,
+                    LoaiMedia: preview.type.startsWith('video/') ? 'VideoBaiDang' : 'AnhBaiDang'
                 }))
             };
 
@@ -84,6 +88,7 @@ const PostForm = ({ onPostCreated }) => {
             if (fileInputRef.current) fileInputRef.current.value = '';
         } catch (error) {
             console.error('Lỗi khi tạo bài viết:', error);
+            setStatusMessage('');
             alert('Không thể tạo bài viết!');
         } finally {
             setUploading(false);
@@ -95,7 +100,7 @@ const PostForm = ({ onPostCreated }) => {
         <div className="post-form-container">
             <div className="post-form-header">
                 <img 
-                    src={user?.avatar || 'http://localhost:5000/uploads/avatar/Default_Avatar.jpg'} 
+                    src={user?.avatar || '/viettel-telecom-seeklogo.svg'} 
                     alt="avatar" 
                     className="post-avatar"
                     onError={(e) => {
@@ -113,9 +118,13 @@ const PostForm = ({ onPostCreated }) => {
 
             {previews.length > 0 && (
                 <div className="preview-container">
-                    {previews.map((src, index) => (
+                    {previews.map((preview, index) => (
                         <div key={index} className="preview-item">
-                            <img src={src} alt="preview" />
+                            {preview.type.startsWith('video/') ? (
+                                <video src={preview.url} alt="preview" controls />
+                            ) : (
+                                <img src={preview.url} alt="preview" />
+                            )}
                             <span className="remove-btn" onClick={() => removeFile(index)}>&times;</span>
                         </div>
                     ))}
@@ -128,13 +137,19 @@ const PostForm = ({ onPostCreated }) => {
                 </div>
             )}
 
+            {statusMessage && (
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-700">
+                    {statusMessage}
+                </div>
+            )}
+
             <div className="post-form-actions">
                 <label className="file-upload-btn">
                     <i className="fa-solid fa-image"></i> Ảnh/Video
                     <input 
                         type="file" 
                         multiple 
-                        accept="image/jpeg, image/png, image/webp, image/heic"
+                        accept="image/jpeg, image/png, image/webp, image/heic, video/mp4, video/quicktime, video/webm, video/x-msvideo"
                         onChange={handleFileSelect}
                         ref={fileInputRef}
                         disabled={uploading}

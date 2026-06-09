@@ -1,5 +1,6 @@
 import pool from '../db.js';
 import { getPresignedUrl } from './minio.service.js';
+import * as feedService from '../src/services/feed.service.js';
 
 export const createPost = async (userId, content, mediaIds) => {
     const connection = await pool.getConnection();
@@ -8,7 +9,7 @@ export const createPost = async (userId, content, mediaIds) => {
 
         // 1. Tạo bài đăng mới
         const [postResult] = await connection.query(
-            `INSERT INTO baidang (NguoiDungId, NoiDung, DaXoa) VALUES (?, ?, 0)`,
+            `INSERT INTO baidang (NguoiDungId, NoiDung, DaXoa, TrangThai) VALUES (?, ?, 0, 'ChoDuyet')`,
             [userId, content]
         );
         const postId = postResult.insertId;
@@ -21,8 +22,22 @@ export const createPost = async (userId, content, mediaIds) => {
             );
         }
 
+        await feedService.updateFeedScore(postId, connection);
+
         await connection.commit();
-        return postId;
+        return {
+            postId,
+            post: {
+                Id: postId,
+                NguoiDungId: userId,
+                NoiDung: content,
+                TrangThai: 'ChoDuyet',
+                SoLuotThich: 0,
+                SoBinhLuan: 0,
+                IsLiked: false,
+                Media: [],
+            },
+        };
     } catch (error) {
         await connection.rollback();
         throw error;
@@ -32,66 +47,27 @@ export const createPost = async (userId, content, mediaIds) => {
 };
 
 export const getFeed = async (userId, limit = 10, offset = 0) => {
-    // 1 query lớn để lấy feed cùng với thông tin người dùng và số like/comment cache + flag Đã Like
-    const [posts] = await pool.query(
-        `SELECT b.Id, b.NoiDung, b.NgayTao, b.SoLuotThich, b.SoBinhLuan, 
-                n.Id AS NguoiDungId, n.TenDangNhap, n.AnhDaiDienKey, n.AnhDaiDienUrl,
-                (SELECT COUNT(*) FROM luotthich lt WHERE lt.BaiDangId = b.Id AND lt.NguoiDungId = ?) AS IsLiked
-         FROM baidang b
-         JOIN nguoidung n ON b.NguoiDungId = n.Id
-         WHERE b.DaXoa = 0
-         ORDER BY b.NgayTao DESC
-         LIMIT ? OFFSET ?`,
-        [userId, limit, offset]
-    );
-
-    if (posts.length === 0) return [];
-
-    const postIds = posts.map(p => p.Id);
-
-    // Lấy tất cả media của danh sách bài viết này
-    const [mediaList] = await pool.query(
-        `SELECT Id, BaiDangId, StorageKey, ThumbnailKey, ThuTu, KichThuocBytes, ChieuRong, ChieuCao 
-         FROM media 
-         WHERE BaiDangId IN (?) AND DaXoa = 0 
-         ORDER BY BaiDangId, ThuTu ASC`,
-        [postIds]
-    );
-
-    // Gắn media vào bài viết và dùng presigned URL
-    for (const post of posts) {
-        post.IsLiked = post.IsLiked > 0;
-        
-        // Tạo URL cho avatar
-        if (post.AnhDaiDienKey) {
-            post.AnhDaiDienUrl = await getPresignedUrl(post.AnhDaiDienKey);
-        } else {
-            post.AnhDaiDienUrl = await getPresignedUrl('avatars/Default_Avatar.jpg');
-        }
-        
-        const postMedia = mediaList.filter(m => m.BaiDangId === post.Id);
-        // Map presigned URL
-        post.Media = await Promise.all(postMedia.map(async (m) => ({
-            Id: m.Id,
-            ThuTu: m.ThuTu,
-            Url: await getPresignedUrl(m.StorageKey),
-            ThumbnailUrl: await getPresignedUrl(m.ThumbnailKey),
-            ChieuRong: m.ChieuRong,
-            ChieuCao: m.ChieuCao
-        })));
-    }
-
-    return posts;
+    return feedService.getFeed(userId, limit, offset);
 };
 
 export const getPostDetail = async (userId, postId) => {
     const [posts] = await pool.query(
         `SELECT b.Id, b.NoiDung, b.NgayTao, b.SoLuotThich, b.SoBinhLuan, 
-                n.Id AS NguoiDungId, n.TenDangNhap, n.AnhDaiDienKey, n.AnhDaiDienUrl,
+          n.Id AS NguoiDungId, n.TenDangNhap, n.AnhDaiDienKey, n.AnhDaiDienUrl,
+          IFNULL(ur.VaiTroTen, 'NhanVien') AS VaiTroTen,
+          IFNULL(ur.DoUuTien, 0) AS VaiTroDoUuTien,
                 (SELECT COUNT(*) FROM luotthich lt WHERE lt.BaiDangId = b.Id AND lt.NguoiDungId = ?) AS IsLiked
          FROM baidang b
          JOIN nguoidung n ON b.NguoiDungId = n.Id
-         WHERE b.Id = ? AND b.DaXoa = 0`,
+      LEFT JOIN (
+         SELECT nv.NguoiDungId,
+             MAX(v.DoUuTien) AS DoUuTien,
+             SUBSTRING_INDEX(GROUP_CONCAT(v.TenVaiTro ORDER BY v.DoUuTien DESC, v.Id ASC SEPARATOR ','), ',', 1) AS VaiTroTen
+         FROM nguoidung_vaitro nv
+         JOIN vaitro v ON v.Id = nv.VaiTroId
+         GROUP BY nv.NguoiDungId
+      ) ur ON ur.NguoiDungId = n.Id
+         WHERE b.Id = ? AND b.DaXoa = 0 AND b.TrangThai = 'DaDuyet'`,
         [userId, postId]
     );
 
@@ -107,7 +83,7 @@ export const getPostDetail = async (userId, postId) => {
 
     // Media
     const [mediaList] = await pool.query(
-        `SELECT Id, StorageKey, ThumbnailKey, ThuTu, KichThuocBytes, ChieuRong, ChieuCao 
+        `SELECT Id, StorageKey, ThumbnailKey, ThuTu, KichThuocBytes, ChieuRong, ChieuCao, LoaiMedia 
          FROM media 
          WHERE BaiDangId = ? AND DaXoa = 0 
          ORDER BY ThuTu ASC`,
@@ -118,12 +94,46 @@ export const getPostDetail = async (userId, postId) => {
         Id: m.Id,
         ThuTu: m.ThuTu,
         Url: await getPresignedUrl(m.StorageKey),
-        ThumbnailUrl: await getPresignedUrl(m.ThumbnailKey),
+        ThumbnailUrl: m.ThumbnailKey ? await getPresignedUrl(m.ThumbnailKey) : null,
         ChieuRong: m.ChieuRong,
-        ChieuCao: m.ChieuCao
+        ChieuCao: m.ChieuCao,
+        LoaiMedia: m.LoaiMedia
     })));
 
     return post;
+};
+
+export const reportPost = async (userId, postId, reason) => {
+    const trimmedReason = typeof reason === 'string' ? reason.trim() : '';
+    if (!trimmedReason) {
+        throw new Error('EMPTY_REPORT_REASON');
+    }
+
+    const [postRows] = await pool.query(
+        `SELECT Id, NguoiDungId, TrangThai, DaXoa FROM baidang WHERE Id = ? LIMIT 1`,
+        [postId]
+    );
+
+    if (postRows.length === 0 || postRows[0].DaXoa === 1) {
+        throw new Error('POST_NOT_FOUND');
+    }
+
+    if (String(postRows[0].NguoiDungId) === String(userId)) {
+        throw new Error('SELF_REPORT_NOT_ALLOWED');
+    }
+
+    const [insertResult] = await pool.query(
+        `INSERT INTO baidang_baocao (BaiDangId, NguoiBaoCaoId, LyDo)
+         VALUES (?, ?, ?)
+         ON DUPLICATE KEY UPDATE LyDo = VALUES(LyDo), TrangThai = 'ChoXuLy', NgayTao = CURRENT_TIMESTAMP, NguoiXuLyId = NULL, NgayXuLy = NULL, GhiChuXuLy = NULL`,
+        [postId, userId, trimmedReason]
+    );
+
+    return {
+        reportId: insertResult.insertId || null,
+        postId,
+        reason: trimmedReason,
+    };
 };
 
 export const deletePost = async (userId, postId) => {
@@ -149,6 +159,7 @@ export const likePost = async (userId, postId) => {
                 `UPDATE baidang SET SoLuotThich = SoLuotThich + 1 WHERE Id = ? AND DaXoa = 0`,
                 [postId]
             );
+            await feedService.updateFeedScore(postId, connection);
         }
 
         await connection.commit();
@@ -176,6 +187,7 @@ export const unlikePost = async (userId, postId) => {
                 `UPDATE baidang SET SoLuotThich = SoLuotThich - 1 WHERE Id = ? AND SoLuotThich > 0 AND DaXoa = 0`,
                 [postId]
             );
+            await feedService.updateFeedScore(postId, connection);
         }
 
         await connection.commit();
@@ -186,6 +198,28 @@ export const unlikePost = async (userId, postId) => {
     } finally {
         connection.release();
     }
+};
+
+export const getLikes = async (postId, limit = 20, offset = 0) => {
+    const [users] = await pool.query(
+        `SELECT n.Id, n.TenDangNhap, n.AnhDaiDienKey, n.AnhDaiDienUrl
+         FROM luotthich lt
+         JOIN nguoidung n ON lt.NguoiDungId = n.Id
+         WHERE lt.BaiDangId = ?
+         ORDER BY lt.NgayTao DESC
+         LIMIT ? OFFSET ?`,
+        [postId, limit, offset]
+    );
+
+    for (const user of users) {
+        if (user.AnhDaiDienKey) {
+            user.AnhDaiDienUrl = await getPresignedUrl(user.AnhDaiDienKey);
+        } else {
+            user.AnhDaiDienUrl = await getPresignedUrl('avatars/Default_Avatar.jpg');
+        }
+    }
+
+    return users;
 };
 
 export const addComment = async (userId, postId, content, parentId = null) => {
@@ -207,6 +241,8 @@ export const addComment = async (userId, postId, content, parentId = null) => {
             `UPDATE baidang SET SoBinhLuan = SoBinhLuan + 1 WHERE Id = ?`,
             [postId]
         );
+
+        await feedService.updateFeedScore(postId, connection);
 
         await connection.commit();
         return commentId;

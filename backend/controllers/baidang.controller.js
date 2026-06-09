@@ -1,4 +1,17 @@
 import * as baidangService from '../services/baidang.service.js';
+import {
+    createPostCommentedNotification,
+    createPostLikedNotification,
+} from '../src/services/notification.service.js';
+import { respondWithServerError } from '../src/utils/dbError.js';
+
+const emitNotificationRefresh = (req) => {
+    if (req.io) {
+        req.io.emit('notification_created', {
+            occurredAt: new Date().toISOString(),
+        });
+    }
+};
 
 export const createPost = async (req, res) => {
     try {
@@ -9,11 +22,15 @@ export const createPost = async (req, res) => {
             return res.status(400).json({ success: false, message: 'Bài viết không được để trống', code: 'EMPTY_POST' });
         }
 
-        const postId = await baidangService.createPost(userId, content || '', mediaIds || []);
-        return res.status(201).json({ success: true, data: { postId } });
+        const created = await baidangService.createPost(userId, content || '', mediaIds || []);
+        emitNotificationRefresh(req);
+        return res.status(201).json({
+            success: true,
+            message: 'Đăng bài thành công. Bài viết đang chờ duyệt.',
+            data: created,
+        });
     } catch (error) {
-        console.error('Lỗi khi tạo bài viết:', error);
-        return res.status(500).json({ success: false, message: 'Đã xảy ra lỗi hệ thống', code: 'INTERNAL_SERVER_ERROR' });
+        return respondWithServerError(res, error, 'Đã xảy ra lỗi hệ thống');
     }
 };
 
@@ -24,10 +41,10 @@ export const getFeed = async (req, res) => {
         const offset = parseInt(req.query.offset) || 0;
 
         const posts = await baidangService.getFeed(userId, limit, offset);
-        return res.status(200).json({ success: true, data: posts });
+        return res.status(200).json({ success: true, message: 'Lấy feed thành công', data: posts });
     } catch (error) {
         console.error('Lỗi khi lấy feed:', error);
-        return res.status(500).json({ success: false, message: 'Đã xảy ra lỗi hệ thống', code: 'INTERNAL_SERVER_ERROR' });
+        return respondWithServerError(res, error, 'Đã xảy ra lỗi hệ thống');
     }
 };
 
@@ -43,8 +60,33 @@ export const getPostDetail = async (req, res) => {
 
         return res.status(200).json({ success: true, data: post });
     } catch (error) {
-        console.error('Lỗi khi lấy chi tiết bài viết:', error);
-        return res.status(500).json({ success: false, message: 'Đã xảy ra lỗi hệ thống', code: 'INTERNAL_SERVER_ERROR' });
+        return respondWithServerError(res, error, 'Đã xảy ra lỗi hệ thống');
+    }
+};
+
+export const reportPost = async (req, res) => {
+    try {
+        const userId = req.user.Id || req.user.id;
+        const postId = req.params.id;
+        const { reason } = req.body;
+
+        const report = await baidangService.reportPost(userId, postId, reason);
+        return res.status(201).json({
+            success: true,
+            message: 'Đã gửi báo cáo bài viết.',
+            data: report,
+        });
+    } catch (error) {
+        if (error.message === 'EMPTY_REPORT_REASON') {
+            return res.status(400).json({ success: false, message: 'Lý do báo cáo không được để trống', code: 'EMPTY_REPORT_REASON' });
+        }
+        if (error.message === 'SELF_REPORT_NOT_ALLOWED') {
+            return res.status(400).json({ success: false, message: 'Không thể báo cáo bài viết của chính mình', code: 'SELF_REPORT_NOT_ALLOWED' });
+        }
+        if (error.message === 'POST_NOT_FOUND') {
+            return res.status(404).json({ success: false, message: 'Bài viết không tồn tại', code: 'NOT_FOUND' });
+        }
+        return respondWithServerError(res, error, 'Đã xảy ra lỗi hệ thống');
     }
 };
 
@@ -60,8 +102,7 @@ export const deletePost = async (req, res) => {
 
         return res.status(200).json({ success: true, message: 'Xóa bài viết thành công' });
     } catch (error) {
-        console.error('Lỗi khi xóa bài viết:', error);
-        return res.status(500).json({ success: false, message: 'Đã xảy ra lỗi hệ thống', code: 'INTERNAL_SERVER_ERROR' });
+        return respondWithServerError(res, error, 'Đã xảy ra lỗi hệ thống');
     }
 };
 
@@ -71,10 +112,13 @@ export const likePost = async (req, res) => {
         const postId = req.params.id;
 
         await baidangService.likePost(userId, postId);
+        void createPostLikedNotification({ actorId: userId, postId }).catch((error) => {
+            console.error('Không thể tạo thông báo thích bài viết:', error);
+        });
+        emitNotificationRefresh(req);
         return res.status(200).json({ success: true, message: 'Thích bài viết thành công' });
     } catch (error) {
-        console.error('Lỗi khi thích bài viết:', error);
-        return res.status(500).json({ success: false, message: 'Đã xảy ra lỗi hệ thống', code: 'INTERNAL_SERVER_ERROR' });
+        return respondWithServerError(res, error, 'Đã xảy ra lỗi hệ thống');
     }
 };
 
@@ -86,8 +130,20 @@ export const unlikePost = async (req, res) => {
         await baidangService.unlikePost(userId, postId);
         return res.status(200).json({ success: true, message: 'Bỏ thích bài viết thành công' });
     } catch (error) {
-        console.error('Lỗi khi bỏ thích bài viết:', error);
-        return res.status(500).json({ success: false, message: 'Đã xảy ra lỗi hệ thống', code: 'INTERNAL_SERVER_ERROR' });
+        return respondWithServerError(res, error, 'Đã xảy ra lỗi hệ thống');
+    }
+};
+
+export const getLikes = async (req, res) => {
+    try {
+        const postId = req.params.id;
+        const limit = parseInt(req.query.limit) || 20;
+        const offset = parseInt(req.query.offset) || 0;
+
+        const users = await baidangService.getLikes(postId, limit, offset);
+        return res.status(200).json({ success: true, data: users });
+    } catch (error) {
+        return respondWithServerError(res, error, 'Đã xảy ra lỗi hệ thống');
     }
 };
 
@@ -102,13 +158,16 @@ export const addComment = async (req, res) => {
         }
 
         const commentId = await baidangService.addComment(userId, postId, content, null);
+        void createPostCommentedNotification({ actorId: userId, postId, commentContent: content }).catch((error) => {
+            console.error('Không thể tạo thông báo bình luận bài viết:', error);
+        });
+        emitNotificationRefresh(req);
         return res.status(201).json({ success: true, data: { commentId } });
     } catch (error) {
         if (error.message === 'POST_NOT_FOUND') {
             return res.status(404).json({ success: false, message: 'Bài viết không tồn tại', code: 'NOT_FOUND' });
         }
-        console.error('Lỗi khi bình luận:', error);
-        return res.status(500).json({ success: false, message: 'Đã xảy ra lỗi hệ thống', code: 'INTERNAL_SERVER_ERROR' });
+        return respondWithServerError(res, error, 'Đã xảy ra lỗi hệ thống');
     }
 };
 
@@ -121,8 +180,7 @@ export const getRootComments = async (req, res) => {
         const comments = await baidangService.getRootComments(postId, limit, offset);
         return res.status(200).json({ success: true, data: comments });
     } catch (error) {
-        console.error('Lỗi khi lấy bình luận:', error);
-        return res.status(500).json({ success: false, message: 'Đã xảy ra lỗi hệ thống', code: 'INTERNAL_SERVER_ERROR' });
+        return respondWithServerError(res, error, 'Đã xảy ra lỗi hệ thống');
     }
 };
 
@@ -140,10 +198,10 @@ export const applyReply = async (req, res) => {
         }
 
         const commentId = await baidangService.addComment(userId, postId, content, parentId);
+        emitNotificationRefresh(req);
         return res.status(201).json({ success: true, data: { commentId } });
     } catch (error) {
-        console.error('Lỗi khi phản hồi bình luận:', error);
-        return res.status(500).json({ success: false, message: 'Đã xảy ra lỗi hệ thống', code: 'INTERNAL_SERVER_ERROR' });
+        return respondWithServerError(res, error, 'Đã xảy ra lỗi hệ thống');
     }
 };
 
@@ -156,7 +214,6 @@ export const getReplies = async (req, res) => {
         const replies = await baidangService.getReplies(commentId, limit, offset);
         return res.status(200).json({ success: true, data: replies });
     } catch (error) {
-        console.error('Lỗi khi lấy reply:', error);
-        return res.status(500).json({ success: false, message: 'Đã xảy ra lỗi hệ thống', code: 'INTERNAL_SERVER_ERROR' });
+        return respondWithServerError(res, error, 'Đã xảy ra lỗi hệ thống');
     }
 };

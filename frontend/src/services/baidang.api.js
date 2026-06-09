@@ -18,7 +18,12 @@ export const createPostApi = async (content, mediaIds) => {
 };
 
 export const getFeedApi = async (limit = 10, offset = 0) => {
-    const res = await api.get(`/baidang/feed?limit=${limit}&offset=${offset}`);
+    const res = await api.get(`/feed?limit=${limit}&offset=${offset}`);
+    return res.data;
+};
+
+export const getPostDetailApi = async (postId) => {
+    const res = await api.get(`/baidang/${postId}`);
     return res.data;
 };
 
@@ -29,6 +34,21 @@ export const likePostApi = async (postId) => {
 
 export const unlikePostApi = async (postId) => {
     const res = await api.delete(`/baidang/${postId}/thich`);
+    return res.data;
+};
+
+export const deletePostApi = async (postId) => {
+    const res = await api.delete(`/baidang/${postId}`);
+    return res.data;
+};
+
+export const reportPostApi = async (postId, reason) => {
+    const res = await api.post(`/baidang/${postId}/report`, { reason });
+    return res.data;
+};
+
+export const getLikesApi = async (postId, limit = 20, offset = 0) => {
+    const res = await api.get(`/baidang/${postId}/thich?limit=${limit}&offset=${offset}`);
     return res.data;
 };
 

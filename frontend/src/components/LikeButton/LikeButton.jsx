@@ -10,7 +10,7 @@ const LikeButton = ({ isLiked, likeCount, onClick }) => {
             <span className="icon" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>
                 {isLiked ? <i className="fa-solid fa-thumbs-up"></i> : <i className="fa-regular fa-thumbs-up"></i>}
             </span>
-            <span className="count">
+            <span className="count action-label">
                 {likeCount > 0 ? likeCount : 'Thích'}
             </span>
         </button>

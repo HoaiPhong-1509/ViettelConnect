@@ -1,13 +1,27 @@
 import { useState, useCallback } from 'react';
 import { likePostApi, unlikePostApi, getCommentsApi, addCommentApi, getRepliesApi, addReplyApi } from '../services/baidang.api';
+import { useAuth } from '../contexts/AuthContext';
 
 export const usePost = (initialPost) => {
+    const { user } = useAuth();
     const [post, setPost] = useState(initialPost);
     const [comments, setComments] = useState([]);
     const [loadingComments, setLoadingComments] = useState(false);
     const [hasMoreComments, setHasMoreComments] = useState(true);
     const [commentOffset, setCommentOffset] = useState(0);
     const [showComments, setShowComments] = useState(false);
+
+    const getCurrentUserIdentity = () => {
+        const storedUser = typeof window !== 'undefined' ? localStorage.getItem('userInfo') : null;
+        const parsedStoredUser = storedUser ? JSON.parse(storedUser) : null;
+        const currentUser = user || parsedStoredUser || {};
+
+        return {
+            id: currentUser.id || currentUser.Id || 'me',
+            username: currentUser.tenDangNhap || currentUser.TenDangNhap || 'Tôi',
+            avatarUrl: currentUser.avatar || currentUser.AnhDaiDienUrl || '/viettel-telecom-seeklogo.svg',
+        };
+    };
 
     const toggleLike = async () => {
         const isCurrentlyLiked = post.IsLiked;
@@ -64,18 +78,20 @@ export const usePost = (initialPost) => {
     const handleAddComment = async (content) => {
         try {
             const res = await addCommentApi(post.Id, content);
+            const me = getCurrentUserIdentity();
             // Giả lập comment vừa thêm để hiện ngay
             const newComment = {
                 Id: res.data.commentId,
                 NoiDung: content,
-                NguoiDungId: 'me', // TODO: sync với auth context
-                TenDangNhap: 'Tôi', 
+                NguoiDungId: me.id,
+                TenDangNhap: me.username,
+                AnhDaiDienUrl: me.avatarUrl,
                 NgayTao: new Date().toISOString(),
                 ParentId: null,
                 SoReply: 0,
                 replies: []
             };
-            setComments([newComment, ...comments]);
+            setComments((prev) => [newComment, ...prev]);
             setPost(prev => ({ ...prev, SoBinhLuan: prev.SoBinhLuan + 1 }));
         } catch (error) {
             console.error('Lỗi khi thêm bình luận', error);
@@ -101,11 +117,13 @@ export const usePost = (initialPost) => {
     const handleAddReply = async (commentId, content) => {
         try {
             const res = await addReplyApi(commentId, post.Id, content);
+            const me = getCurrentUserIdentity();
             const newReply = {
                 Id: res.data.commentId,
                 NoiDung: content,
-                NguoiDungId: 'me',
-                TenDangNhap: 'Tôi',
+                NguoiDungId: me.id,
+                TenDangNhap: me.username,
+                AnhDaiDienUrl: me.avatarUrl,
                 NgayTao: new Date().toISOString(),
                 ParentId: commentId
             };

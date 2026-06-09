@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
 import './CommentSection.css';
 
 const CommentSection = ({ 
@@ -10,6 +11,7 @@ const CommentSection = ({
     onLoadReplies, 
     onAddReply 
 }) => {
+    const { user } = useAuth();
     const [mainComment, setMainComment] = useState('');
     const [replyContents, setReplyContents] = useState({});
     const [showReplyInput, setShowReplyInput] = useState({});
@@ -44,7 +46,15 @@ const CommentSection = ({
                 {comments.map(c => (
                     <div key={c.Id} className="comment-thread">
                         <div className="comment-item">
-                            <img src={c.AnhDaiDienUrl || '/default-avatar.png'} alt="avatar" className="comment-avatar" />
+                            <img
+                                src={c.AnhDaiDienUrl || '/viettel-telecom-seeklogo.svg'}
+                                alt="avatar"
+                                className="comment-avatar"
+                                onError={(e) => {
+                                    e.currentTarget.onerror = null;
+                                    e.currentTarget.src = '/viettel-telecom-seeklogo.svg';
+                                }}
+                            />
                             <div className="comment-content">
                                 <div className="comment-bubble">
                                     <span className="comment-author">{c.TenDangNhap}</span>
@@ -61,7 +71,15 @@ const CommentSection = ({
                         <div className="replies-container">
                             {c.replies && c.replies.map(r => (
                                 <div key={r.Id} className="comment-item reply">
-                                    <img src={r.AnhDaiDienUrl || '/default-avatar.png'} alt="avatar" className="comment-avatar small" />
+                                    <img
+                                        src={r.AnhDaiDienUrl || '/viettel-telecom-seeklogo.svg'}
+                                        alt="avatar"
+                                        className="comment-avatar small"
+                                        onError={(e) => {
+                                            e.currentTarget.onerror = null;
+                                            e.currentTarget.src = '/viettel-telecom-seeklogo.svg';
+                                        }}
+                                    />
                                     <div className="comment-content">
                                         <div className="comment-bubble">
                                             <span className="comment-author">{r.TenDangNhap}</span>
@@ -82,7 +100,12 @@ const CommentSection = ({
 
                             {showReplyInput[c.Id] && (
                                 <form className="reply-form" onSubmit={(e) => handleReplySubmit(e, c.Id)}>
-                                    <img src="/default-avatar.png" alt="me" className="comment-avatar small" />
+                                    <img 
+                                        src={user?.avatar || '/viettel-telecom-seeklogo.svg'} 
+                                        alt="me" 
+                                        className="comment-avatar small" 
+                                        onError={(e) => { e.currentTarget.src = '/viettel-telecom-seeklogo.svg'; }} 
+                                    />
                                     <input 
                                         type="text" 
                                         placeholder="Viết phản hồi..." 
@@ -107,7 +130,12 @@ const CommentSection = ({
             {loadingComments && <div className="loading-text">Đang tải...</div>}
 
             <form className="main-comment-form" onSubmit={handleMainSubmit}>
-                <img src="/default-avatar.png" alt="me" className="comment-avatar" />
+                <img 
+                    src={user?.avatar || '/viettel-telecom-seeklogo.svg'} 
+                    alt="me" 
+                    className="comment-avatar" 
+                    onError={(e) => { e.currentTarget.src = '/viettel-telecom-seeklogo.svg'; }} 
+                />
                 <input 
                     type="text" 
                     placeholder="Viết bình luận..." 

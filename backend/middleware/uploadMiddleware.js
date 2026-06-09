@@ -3,9 +3,9 @@ import multer from 'multer';
 // Storage in memory
 const storage = multer.memoryStorage();
 
-// File filter (images only)
+// File filter (images and videos)
 const fileFilter = (req, file, cb) => {
-    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic'];
+    const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo'];
     if (allowedMimeTypes.includes(file.mimetype)) {
         cb(null, true);
     } else {
@@ -16,7 +16,7 @@ const fileFilter = (req, file, cb) => {
 export const uploadMediaMiddleware = multer({
     storage,
     limits: {
-        fileSize: 10 * 1024 * 1024, // 10MB
+        fileSize: 50 * 1024 * 1024, // 50MB (tăng lên để hỗ trợ video)
         files: 10 // Max 10 files
     },
     fileFilter

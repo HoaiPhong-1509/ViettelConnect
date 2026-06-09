@@ -18,11 +18,13 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
     response => response,
     error => {
-        if (error.response && error.response.status === 401) {
-            if (typeof window !== 'undefined') {
-                window.location.href = '/login';
-            }
+        const status = error.response?.status;
+
+        if ((status === 401 || status === 403) && typeof window !== 'undefined') {
+            localStorage.removeItem('userInfo');
+            window.location.href = '/login';
         }
+
         return Promise.reject(error);
     }
 );

@@ -118,7 +118,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }: Au
 
         try {
             if (mode === 'login') {
-                const response = await api.post('/auth/login', { tenDangNhap, matKhau });
+                const response = await api.post('/auth/login', { email, matKhau });
                 setSuccessMsg(response.data.message);
                 login(response.data.user);
                 
@@ -177,42 +177,48 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }: Au
 
                 <form onSubmit={handleSubmit}>
                     <div className={mode === 'register' ? 'grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 mb-4' : ''}>
+                        {mode === 'register' && (
+                            <div>
+                                <label className="block text-[#585861] text-[15px] font-semibold mb-2">Họ và tên</label>
+                                <input 
+                                    type="text" 
+                                    className="w-full px-4 py-3 bg-[#f7f7f8] border border-transparent rounded-[12px] focus:outline-none focus:border-[#e60000] focus:bg-white transition-all text-[#12121a] placeholder-[#a1a1aa]"
+                                    placeholder="Nguyễn Văn A"
+                                    value={tenDangNhap}
+                                    onChange={(e) => setTenDangNhap(e.target.value)}
+                                    required
+                                />
+                            </div>
+                        )}
+
                         <div className={mode === 'login' ? 'mb-4' : ''}>
-                            <label className="block text-[#585861] text-[15px] font-semibold mb-2">Tên đăng nhập</label>
+                            <label className="block text-[#585861] text-[15px] font-semibold mb-2">Email</label>
                             <input 
-                                type="text" 
+                                type="email" 
                                 className="w-full px-4 py-3 bg-[#f7f7f8] border border-transparent rounded-[12px] focus:outline-none focus:border-[#e60000] focus:bg-white transition-all text-[#12121a] placeholder-[#a1a1aa]"
-                                placeholder="Nhập tên đăng nhập..."
-                                value={tenDangNhap}
-                                onChange={(e) => setTenDangNhap(e.target.value)}
+                                placeholder="nguyenvana@gmail.com"
+                                value={email}
+                                onChange={(e) => setEmail(e.target.value)}
                                 required
                             />
                         </div>
 
                         {mode === 'register' && (
-                            <div>
-                                <label className="block text-[#585861] text-[15px] font-semibold mb-2">Email</label>
-                                <div className="flex gap-2">
-                                    <input 
-                                        type="email" 
-                                        className="flex-1 px-4 py-3 bg-[#f7f7f8] border border-transparent rounded-[12px] focus:outline-none focus:border-[#e60000] focus:bg-white transition-all text-[#12121a] placeholder-[#a1a1aa]"
-                                        placeholder="nguyenvana@gmail.com"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        disabled={isOtpSent}
-                                        required={mode === 'register'}
-                                    />
+                            <div className="md:col-span-2">
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                    <label className="block text-[#585861] text-[15px] font-semibold">Gửi OTP qua email</label>
                                     {!isOtpSent && (
                                         <button 
                                             type="button"
                                             onClick={handleSendOtp}
                                             disabled={isLoading || !email}
-                                            className="whitespace-nowrap bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold px-4 rounded-[12px] transition-colors"
+                                            className="whitespace-nowrap bg-gray-200 hover:bg-gray-300 text-gray-700 font-semibold px-4 py-2 rounded-[12px] transition-colors"
                                         >
                                             Lấy mã
                                         </button>
                                     )}
                                 </div>
+                                <p className="text-xs text-[#71717a] mb-1">Email sẽ dùng để đăng nhập và nhận mã xác thực OTP.</p>
                             </div>
                         )}
 

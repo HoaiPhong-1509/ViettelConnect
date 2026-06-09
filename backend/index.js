@@ -8,13 +8,29 @@ import authRoutes from './auth.js';
 import adminRoutes from './admin.js';
 import userRoutes from './user.js';
 import postRoutes from './post.js';
+import feedRoutes from './src/routes/feed.routes.js';
 import baidangRoutes from './routes/baidang.routes.js';
 import mediaRoutes from './routes/media.routes.js';
 import binhluanRoutes from './routes/binhluan.routes.js';
+import chatRoutes from './routes/chat.routes.js';
+import supportRoutes from './routes/support.routes.js';
+import initSocket from './socket.js';
+import http from 'http';
 import dotenv from 'dotenv';
+import { respondWithServerError } from './src/utils/dbError.js';
 dotenv.config();
 
 const app = express();
+const server = http.createServer(app);
+
+// Khởi tạo Socket.io
+const io = initSocket(server);
+
+// Truyền io vào request để controller dùng lại
+app.use((req, res, next) => {
+    req.io = io;
+    next();
+});
 
 // 1. Áp dụng Helmet để che dấu thông tin Express và thêm Headers bảo mật (Chống Clickjacking, XSS,...)
 app.use(helmet({
@@ -41,15 +57,25 @@ const limiter = rateLimit({
     max: 100, 
     message: { message: 'Quá nhiều yêu cầu từ IP này, vui lòng thử lại sau 15 phút!' }
 });
-app.use('/api/', limiter);
+app.use('/api/auth', limiter);
 
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/user', userRoutes);
 app.use('/api/posts', postRoutes);
+app.use('/api/feed', feedRoutes);
 app.use('/api/baidang', baidangRoutes);
+app.use('/api/chat', chatRoutes);
+app.use('/api/support', supportRoutes);
+
 app.use('/api/media', mediaRoutes);
 app.use('/api/binhluan', binhluanRoutes);
+
+const port = process.env.PORT || 5000;
+server.listen(port, () => {
+    console.log(`Server is running on port ${port}`);
+    console.log(`Backend đang chạy tại: http://localhost:${port}`);
+});
 
 // Serve static files for uploads
 import path from 'path';
@@ -63,11 +89,8 @@ app.get('/api/nguoidung', async (req, res) => {
         const [rows] = await pool.query('SELECT * FROM nguoidung');
         res.json(rows);
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Lỗi kết nối Server' });
+        respondWithServerError(res, err, 'Lỗi kết nối Server');
     }
 });
 
-app.listen(process.env.PORT || 5000, () => {
-    console.log(`Backend đang chạy tại: http://localhost:${process.env.PORT || 5000}`);
-});
+// Note: server is started above with `server.listen` to support Socket.io

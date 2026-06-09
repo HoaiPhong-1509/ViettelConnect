@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "../contexts/AuthContext";
+import { NotificationPanelProvider } from "../contexts/NotificationPanelContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -35,7 +36,9 @@ export default function RootLayout({
     className="min-h-screen bg-[#f0f2f5]"
   >
     <AuthProvider>
-      {children}
+      <NotificationPanelProvider>
+        {children}
+      </NotificationPanelProvider>
     </AuthProvider>
   </body>
 </html>

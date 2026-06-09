@@ -4,10 +4,26 @@ import jwt from 'jsonwebtoken';
 import pool from './db.js';
 import { body, validationResult } from 'express-validator';
 import { sendOTPEmail } from './mailer.js';
+import { verifyToken } from './middleware/authMiddleware.js';
 
 import { getPresignedUrl } from './services/minio.service.js';
 
 const router = express.Router();
+
+const isDatabaseConnectionError = (error) => {
+    const code = error?.code || error?.cause?.code;
+    return code === 'ECONNREFUSED' || error?.fatal === true;
+};
+
+const respondWithServerError = (res, error, fallbackMessage = 'Lỗi server') => {
+    if (isDatabaseConnectionError(error)) {
+        console.error('Cơ sở dữ liệu hiện không khả dụng:', error?.message || 'ECONNREFUSED');
+        return res.status(503).json({ message: 'Cơ sở dữ liệu hiện không khả dụng, vui lòng thử lại sau.' });
+    }
+
+    console.error(error);
+    return res.status(500).json({ message: fallbackMessage });
+};
 
 // Bộ nhớ tạm lưu trữ OTP (Sử dụng Map: email -> { otp, expiry })
 const otpStore = new Map();
@@ -98,14 +114,13 @@ router.post('/register', [
 
         res.status(201).json({ message: 'Xác thực & Đăng ký thành công. Vui lòng chờ admin duyệt!' });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Lỗi server' });
+        respondWithServerError(res, err);
     }
 });
 
 // LỚP BẢO MẬT 5: Input Validation cho API Đăng nhập
 router.post('/login', [
-    body('tenDangNhap').notEmpty().withMessage('Tên đăng nhập không được bỏ trống').trim().escape(),
+    body('email').isEmail().withMessage('Email không hợp lệ').normalizeEmail(),
     body('matKhau').notEmpty().withMessage('Mật khẩu không được bỏ trống')
 ], async (req, res) => {
     const errors = validationResult(req);
@@ -113,18 +128,19 @@ router.post('/login', [
         return res.status(400).json({ errors: errors.array() });
     }
 
-    const { tenDangNhap, matKhau } = req.body;
+    const { email, matKhau } = req.body;
     try {
-        const [users] = await pool.query('SELECT * FROM nguoidung WHERE TenDangNhap = ?', [tenDangNhap]);
+        const loginEmail = String(email || '').trim();
+        const [users] = await pool.query('SELECT * FROM nguoidung WHERE Email = ? LIMIT 1', [loginEmail]);
         if (users.length === 0) {
-            return res.status(400).json({ message: 'Sai tên đăng nhập hoặc mật khẩu' });
+            return res.status(400).json({ message: 'Sai email hoặc mật khẩu' });
         }
         
         const user = users[0];
 
         const validPassword = await bcrypt.compare(matKhau, user.MatKhauHash);
         if (!validPassword) {
-            return res.status(400).json({ message: 'Sai tên đăng nhập hoặc mật khẩu' });
+            return res.status(400).json({ message: 'Sai email hoặc mật khẩu' });
         }
 
         if (user.TrangThai === 'ChoDuyet') {
@@ -165,10 +181,9 @@ router.post('/login', [
         }
 
         // Không gửi Token về nữa, chỉ gửi tin báo và info user
-        res.json({ message: 'Đăng nhập thành công', user: { id: user.Id, tenDangNhap: user.TenDangNhap, email: user.Email, roles: userRoles, avatar: avatarUrl } });
+        res.json({ message: 'Đăng nhập thành công', user: { id: user.Id, tenDangNhap: user.TenDangNhap, email: user.Email, roles: userRoles, avatar: avatarUrl, createdAt: user.NgayTao } });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ message: 'Lỗi server' });
+        respondWithServerError(res, err);
     }
 });
 
@@ -176,6 +191,45 @@ router.post('/login', [
 router.post('/logout', (req, res) => {
     res.clearCookie('token');
     res.json({ message: 'Đăng xuất thành công' });
+});
+
+router.get('/me', verifyToken, async (req, res) => {
+    try {
+        const [users] = await pool.query(
+            'SELECT Id, TenDangNhap, Email, AnhDaiDienKey, NgayTao FROM nguoidung WHERE Id = ? LIMIT 1',
+            [req.user.id]
+        );
+
+        if (!users.length) {
+            return res.status(401).json({ message: 'Phiên đăng nhập không hợp lệ hoặc đã hết hạn.' });
+        }
+
+        const user = users[0];
+        const [roles] = await pool.query(
+            `SELECT v.TenVaiTro
+             FROM vaitro v
+             JOIN nguoidung_vaitro nv ON v.Id = nv.VaiTroId
+             WHERE nv.NguoiDungId = ?`,
+            [user.Id]
+        );
+
+        const avatarUrl = user.AnhDaiDienKey
+            ? await getPresignedUrl(user.AnhDaiDienKey)
+            : await getPresignedUrl('avatars/Default_Avatar.jpg');
+
+        res.json({
+            user: {
+                id: user.Id,
+                tenDangNhap: user.TenDangNhap,
+                email: user.Email,
+                roles: roles.map((role) => role.TenVaiTro),
+                avatar: avatarUrl,
+                createdAt: user.NgayTao,
+            },
+        });
+    } catch (err) {
+        respondWithServerError(res, err);
+    }
 });
 
 export default router;
